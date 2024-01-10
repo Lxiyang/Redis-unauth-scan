@@ -10,3 +10,4 @@ python Redis-unauth-scan.py ip.txt -t 15
 
 Get more help information  
 python Redis-unauth-scan.py -h
+![image](https://github.com/Lxiyang/Redis-unauth-scan/assets/95738186/e67a875a-24f8-49cf-bd83-a0fa63bb5773)
