@@ -33,10 +33,10 @@ def check(ip, port, timeout=10, lock=None):
                     s.sendall('config get requirepass\r\n'.encode())
                     requirepass_result = s.recv(1024)
                     if b'requirepass' in requirepass_result and b'""' in requirepass_result:
-                        print(u"\033[1;31;40m[+]{}:{} 存在未授权访问漏洞".format(ip, port))
+                        print(u"\033[1;31;40m[+]{}:{} 存在Redis未授权漏洞".format(ip, port))
                         return (ip, port)
                     else:
-                        print(u"{}:{} Redis服务器存在密码保护，不是未授权访问漏洞".format(ip, port))
+                        print(u"{}:{} Redis服务器存在密码保护不存在未授权".format(ip, port))
     except (socket.error, socket.timeout):
         with lock:
             pass  
@@ -73,20 +73,20 @@ def scan_multiple_ips(filename, threads):
         print(f"Error: File '{filename}' not found.")
 
     if vulnerable_ips:
-        print("\n存在未授权访问漏洞的IP地址：")
+        print("\n存在Redis未授权漏洞的IP：")
         for ip, port in vulnerable_ips:
             print(f"{ip}:{port}")
     else:
-        print("\n未发现存在未授权访问漏洞的IP地址。")
+        print("\n不存在Redis未授权漏洞的IP。")
 
 def scan_single_ip(ip, port, threads):
     print(banner)
     try:
         check_result = check(ip, port, timeout=10, lock=Lock())
         if check_result:
-            print(f"\n存在未授权访问漏洞的IP地址：\n{check_result[0]}:{check_result[1]}")
+            print(f"\n存在Redis未授权漏洞的IP：\n{check_result[0]}:{check_result[1]}")
         else:
-            print("\n未发现存在未授权访问漏洞的IP地址。")
+            print("\n未发现存在Redis未授权漏洞的IP。")
 
     except KeyboardInterrupt:
         print("\n用户中断任务。")
