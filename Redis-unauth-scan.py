@@ -1,109 +1,101 @@
 #!/usr/bin/env python
 # coding=utf-8
-# author:B1anda0
+# author: B1anda0
 
 import socket
 import sys
-from colorama import Fore, init
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from threading import Lock
-from tqdm import tqdm  
-import argparse
+import colorama
+import time
+import logging
+from colorama import init, Fore
 
+# 初始化 Colorama
 init(autoreset=True)
 
-banner = '''
+# banner
+banner = r'''
 {} _____          _ _                                    _   _     
 |  __ \        | (_)                                  | | | |    
 | |__) |___  __| |_ ___ ______ _   _ _ __   __ _ _   _| |_| |__  
 |  _  // _ \/ _` | / __|______| | | | '_ \ / _` | | | | __| '_ \ 
 | | \ \  __/ (_| | \__ \      | |_| | | | | (_| | |_| | |_| | | |
-|_|  \_\___|\__,_|_|___/       \__,_|_| |_|\__,_|\__,_|\__|_| |_|
+|_|  \_\___|\__,_|_|___/       \__,_|_| |_|\__,_|\__,_|\__|_| |_| 
 '''.format(Fore.CYAN)
 
-def check(ip, port, timeout=10, lock=None):
+# 设置日志
+logging.basicConfig(level=logging.INFO, format='%(message)s')  # 取消时间信息
+logger = logging.getLogger()
+
+def time_file():
+    """生成带时间戳的文件名"""
+    return f"result_{int(time.time())}.txt"
+
+def check(ip, port, results_file, timeout=10):
+    """检查指定 IP 和端口的 Redis 未授权漏洞"""
     try:
         with socket.create_connection((ip, int(port)), timeout=timeout) as s:
             payload = 'info\r\n'
             s.sendall(payload.encode())
             result = s.recv(1024)
-            with lock:
-                if b'redis_version' in result:
-                    # Check if Redis server requires authentication
-                    s.sendall('config get requirepass\r\n'.encode())
-                    requirepass_result = s.recv(1024)
-                    if b'requirepass' in requirepass_result and b'""' in requirepass_result:
-                        print(u"\033[1;31;40m[+]{}:{} 存在Redis未授权漏洞".format(ip, port))
-                        return (ip, port)
-                    else:
-                        print(u"{}:{} Redis服务器存在密码保护不存在未授权".format(ip, port))
-    except (socket.error, socket.timeout):
-        with lock:
-            pass  
-    return None
+            if b'redis_version' in result:
+                # 使用 colorama 的红色高亮显示存在漏洞的消息
+                logger.info(f"{Fore.RED}[+] {ip}:{port} 存在 Redis 未授权漏洞{Fore.RESET}")
+                with open(results_file, 'a') as file:
+                    file.write(f"{ip}:{port}\n")
+            else:
+                logger.info(f"[-] {ip}:{port} 未发现 Redis 未授权漏洞")
+    except (socket.error, socket.timeout) as e:
+        logger.error(f"[-] Error checking {ip}:{port}: {e}")
 
-def scan_multiple_ips(filename, threads):
-    print(banner)  # Print the banner once at the beginning
-    vulnerable_ips = []  
+def print_help():
+    """显示帮助信息"""
+    print('''Usage:
+                 python Redis-unauth-scan.py -u ip:port
+                 python Redis-unauth-scan.py -r url.txt
+              ''')
 
-    try:
-        with open(filename, 'r') as file:
-            total_lines = sum(1 for line in file)
-
-        with open(filename, 'r') as file:
-            lock = Lock()  
-            with ThreadPoolExecutor(max_workers=threads) as executor:
-                futures = {executor.submit(check, *line.strip().split(':'), timeout=10, lock=lock): line for line in file}
-                try:
-                    for _ in tqdm(as_completed(futures), total=total_lines, desc="扫描进度", dynamic_ncols=True):
-                        pass
-
-                    # 获取扫描结果
-                    for future in as_completed(futures):
-                        result = future.result()
-                        if result:
-                            vulnerable_ips.append(result)
-
-                except KeyboardInterrupt:
-                    print("\n用户中断任务。正在清理线程...")
-                    for future in futures:
-                        future.cancel()
-
-    except FileNotFoundError:
-        print(f"Error: File '{filename}' not found.")
-
-    if vulnerable_ips:
-        print("\n存在Redis未授权漏洞的IP：")
-        for ip, port in vulnerable_ips:
-            print(f"{ip}:{port}")
+def validate_ip_port(ip_port):
+    """验证 ip:port 格式是否正确"""
+    if len(ip_port) == 2:
+        return ip_port[0], ip_port[1]
     else:
-        print("\n不存在Redis未授权漏洞的IP。")
+        logger.error('格式错误！')
+        return None, None
 
-def scan_single_ip(ip, port, threads):
-    print(banner)
+def scan_single(ip, port, results_file):
+    """扫描单个 IP 和端口"""
+    check(ip, port, results_file)
+
+def scan_from_file(file_name, results_file):
+    """从文件中扫描多个 IP 和端口"""
     try:
-        check_result = check(ip, port, timeout=10, lock=Lock())
-        if check_result:
-            print(f"\n存在Redis未授权漏洞的IP：\n{check_result[0]}:{check_result[1]}")
-        else:
-            print("\n未发现存在Redis未授权漏洞的IP。")
-
-    except KeyboardInterrupt:
-        print("\n用户中断任务。")
+        with open(file_name, 'r') as file:
+            for line in file:
+                ip_port = line.strip().split(':')
+                ip, port = validate_ip_port(ip_port)
+                if ip and port:
+                    check(ip, port, results_file)
+        logger.info('Scan Over')
+    except FileNotFoundError:
+        logger.error(f"File {file_name} not found.")
+    except Exception as e:
+        logger.error(f"Error reading file {file_name}: {e}")
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Scan for Redis unauthorized access vulnerability. \nThe individual IP addresses are as follows:\npython Redis-unauth-scan.py 192.168.1.1:6379 -t 15\nOr, if you have a file containing multiple IPs:\npython Redis-unauth-scan.py ip.txt -t 15')
-    parser.add_argument('target', type=str, help='Target IP address and port (format: ip:port). Use this option for scanning a single IP or provide a file containing multiple IPs.')
-    parser.add_argument('-t', '--threads', type=int, default=10, help='Number of threads for concurrent scanning (default: 10).')
-
-    args = parser.parse_args()
-
-    if ':' in args.target:
-        # If ':' is present in the target argument, assume it's an IP:Port format for scanning a single IP
-        ip, port = args.target.split(':')
-        scan_single_ip(ip, port, args.threads)
+    print(banner)
+    
+    if len(sys.argv) < 2 or sys.argv[1] in ['-h', '--help']:
+        print_help()
+    elif sys.argv[1] == '-u':
+        ip_port = sys.argv[2].split(':')
+        ip, port = validate_ip_port(ip_port)
+        if ip and port:
+            results_file = time_file()
+            scan_single(ip, port, results_file)
+    elif sys.argv[1] == '-r':
+        file_name = sys.argv[2]
+        results_file = time_file()
+        scan_from_file(file_name, results_file)
     else:
-        # Otherwise, assume it's a file containing multiple IPs
-        scan_multiple_ips(args.target, args.threads)
-
-    print('扫描完成')
+        logger.error('参数错误！')
+        print_help()
