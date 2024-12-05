@@ -22,8 +22,7 @@ banner = r'''
 |_|  \_\___|\__,_|_|___/       \__,_|_| |_|\__,_|\__,_|\__|_| |_| 
 '''.format(Fore.CYAN)
 
-# 设置日志
-logging.basicConfig(level=logging.INFO, format='%(message)s')  # 取消时间信息
+logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger()
 
 def time_file():
@@ -38,7 +37,6 @@ def check(ip, port, results_file, timeout=10):
             s.sendall(payload.encode())
             result = s.recv(1024)
             if b'redis_version' in result:
-                # 使用 colorama 的红色高亮显示存在漏洞的消息
                 logger.info(f"{Fore.RED}[+] {ip}:{port} 存在 Redis 未授权漏洞{Fore.RESET}")
                 with open(results_file, 'a') as file:
                     file.write(f"{ip}:{port}\n")
