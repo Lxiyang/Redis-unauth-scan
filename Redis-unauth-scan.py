@@ -9,10 +9,8 @@ import time
 import logging
 from colorama import init, Fore
 
-# 初始化 Colorama
 init(autoreset=True)
 
-# banner
 banner = r'''
 {} _____          _ _                                    _   _     
 |  __ \        | (_)                                  | | | |    
